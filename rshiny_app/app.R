@@ -309,6 +309,7 @@ tar_norm_row<- fluidRow(
        )
      ),
      br(),
+     
      div(
        style = "display:inline-block; vertical-align:bottom; width:200px",
        h4('Adj. Rating Floor: ')
@@ -318,16 +319,30 @@ tar_norm_row<- fluidRow(
        verbatimTextOutput('adj_elo')
      ),
      br(),
+     
      div(
        h4('Conditions:'),
        tableOutput('cond_table'),
+     ),
+     
+     div(
+       style = "display:inline-block; vertical-align:center; width:200px",
+       h3('Achieve Norm? : ')
+     ),
+     div(
+       style = "display:inline-block; vertical-align:bottom; width:100px",
+       verbatimTextOutput('norm_res')
+     ),
+    br(),
+    
+    div(
        h5('Other conditions:'),
        tags$ul(
          tags$li('Min 2 foreign opponents.'),
          tags$li('Max 2 unrated opponents.'),
        ),
        h5('For more detailed conditions, check ', 
-          tags$a(href="https://handbook.fide.com/chapter/B012022", 'FIDE website','.')
+          tags$a(href="https://handbook.fide.com/chapter/B012024", 'FIDE website','.')
        )
      )
   )
@@ -578,11 +593,24 @@ server<- function(input, output){
   output$tpr<- renderText(toString(tpr()))
   
   # Calculate Norm
-  adj_elo_avg<- reactive({
+  elo_avg_norm<- reactive({
     
     floor_elo<- norm_cond[[input$norm]][1]
     
-    if (num_games()!=0){
+    if (num_games()==0){
+      new_avg<- 0
+      ret_msg<- 'None'
+      
+    } else if(num_games() < max_games){
+      # Convert 1 unrated player to floor_elo
+      new_sum<- sum(elo_vec()[active_rd()]) + floor_elo
+      new_avg<- new_sum/(num_games()+1)
+      new_avg<- floor(new_avg+0.5) 
+      ret_msg<- paste0('0->', floor_elo)
+      return(list('avg'=new_avg, 'msg'=ret_msg))
+      
+    } else{
+      # all 9 games are rated
       min_opp_elo<- min(elo_vec()[active_rd()])
       
       if (min_opp_elo < floor_elo){
@@ -595,10 +623,6 @@ server<- function(input, output){
         new_avg<- elo_avg()
         ret_msg<- 'None'
       }
-      
-    } else{
-      new_avg<- 0
-      ret_msg<- 'None'
     }
     
     return(list('avg'=new_avg, 'msg'=ret_msg))
@@ -613,7 +637,7 @@ server<- function(input, output){
     
     req_points<- 99
     for (i in 1:length(elo_points_vec)){
-      if (adj_elo_avg()$avg >= elo_points_vec[i]){
+      if (elo_avg_norm()$avg >= elo_points_vec[i]){
         req_points<- max_points - (8-i)/2
         break
       }
@@ -624,7 +648,18 @@ server<- function(input, output){
     norm_lvl<- title_lvl[[input$norm]]
     act_MO<- sum(title_vec()[active_rd()] <= norm_lvl)
     act_TH<- sum(title_vec()[active_rd()] <= 6)
-    act_cond<- c(num_games(), act_MO, act_TH, adj_elo_avg()$avg, res_sum())
+    
+    if (0==num_games() || num_games() == max_games){
+      # no need to adjust num_games and res_sum
+      act_cond<- c(num_games(), act_MO, act_TH, elo_avg_norm()$avg, res_sum())
+    } else {
+      # a unrated player is pulled to floor_elo, hence need to +1 game
+      new_num_games<- num_games() + 1
+      unrated_game_idx <- which(unlist(elo_vec()) == 0)[1]
+      new_res_sum<- res_sum() + res_vec()[unrated_game_idx]
+      act_cond<- c(new_num_games, act_MO, act_TH, elo_avg_norm()$avg, new_res_sum)
+    }
+
   
     final_table<- data.frame('Required' = req_cond, 'Actual' = act_cond)
     rownames(final_table)<- cond_name
@@ -634,12 +669,33 @@ server<- function(input, output){
   })
 
   output$cond_table<- renderTable(cond_table(), rownames = TRUE)
+  output$adj_elo<- renderText({elo_avg_norm()$msg})
   
-  output$adj_elo<- renderText({adj_elo_avg()$msg})
+  # check norm final result
+  norm_res_msg<- reactiveVal(NULL)
+  observe({
+    norm_yes<- all(cond_table()$Actual >= cond_table()$Required)
+    if (norm_yes) {
+      norm_res_msg("Yes")
+    } else {
+      norm_res_msg("No")
+    }
+  })
+  output$norm_res<- renderText(
+    norm_res_msg()
+  )
   
   # for chess results import
+  import_status_msg<- reactiveVal(NULL)
+  output$imp_status<- renderText(
+    import_status_msg()
+  )
+  
   observeEvent(input$imp_res_but, 
   {
+    # this status update msg does not show for some reason
+    import_status_msg("Processing...")
+    
     url_info<- read_url(input$res_url)
     status_msg<- url_info$msg
     
@@ -714,14 +770,9 @@ server<- function(input, output){
       }
     }
     
-    output$imp_status<- renderText({
-      status_msg
-    })
+    import_status_msg(status_msg)
     
   })
-  
-  
-  
   
   
   observeEvent(input$reset_tour,
@@ -736,7 +787,7 @@ server<- function(input, output){
       value = 20
     )
     
-    output$imp_status<- renderText({NULL})
+    import_status_msg(NULL)
     
     
     for (i in 1:9){
