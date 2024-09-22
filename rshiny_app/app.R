@@ -804,7 +804,7 @@ server<- function(input, output){
       
       updateTextInput(
         inputId = name_id,
-        value = NULL
+        value = ""
       )
       
       updateNumericInput(
