@@ -447,7 +447,10 @@ read_url<- function(res_url){
       
       title_col<- names(full_res_table)[which(names(full_res_table)=='Name')-1][1]
       
-      res_table<- full_res_table %>% select(c('Rd.', all_of(title_col), 'Name', 'Rtg', 'Res.')) %>% 
+      rtg_colname_list <- c("Rtg", "RtgI", "RtgN")
+      rtg_colname_str <- rtg_colname_list[rtg_colname_list %in% names(full_res_table)][1]
+      
+      res_table<- full_res_table %>% select(c('Rd.', all_of(title_col), 'Name', rtg_colname_str, 'Res.')) %>% 
         setNames(c('rd', 'title', 'name', 'elo', 'res')) %>% arrange(rd)
       
       res_table$title<- res_table$title %>% replace(!res_table$title %in% names(title_lvl[1:6]), values = 'Others') 

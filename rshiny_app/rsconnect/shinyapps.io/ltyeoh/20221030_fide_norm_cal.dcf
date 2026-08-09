@@ -5,7 +5,7 @@ account: ltyeoh
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 7463251
-bundleId: 9130927
+bundleId: 12385275
 url: https://ltyeoh.shinyapps.io/20221030_fide_norm_cal/
 asMultiple: FALSE
 asStatic: FALSE
